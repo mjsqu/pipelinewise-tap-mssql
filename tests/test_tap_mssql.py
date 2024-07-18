@@ -342,10 +342,10 @@ class TestCurrentStream(unittest.TestCase):
                         cursor.execute(f"drop table {t}")
                     except:
                         pass
-                cursor.execute("CREATE TABLE a (val int)")
+                cursor.execute("CREATE TABLE a (val float)")
                 cursor.execute("CREATE TABLE b (val int)")
                 cursor.execute("CREATE TABLE c (val int)")
-                cursor.execute("INSERT INTO a (val) VALUES (1)")
+                cursor.execute("INSERT INTO a (val) VALUES (2147483647)")
                 cursor.execute("INSERT INTO b (val) VALUES (1)")
                 cursor.execute("INSERT INTO c (val) VALUES (1)")
 
@@ -371,7 +371,19 @@ class TestCurrentStream(unittest.TestCase):
         global SINGER_MESSAGES
         SINGER_MESSAGES.clear()
 
-        tap_mssql.do_sync(self.conn, test_utils.get_db_config(), self.catalog, state)
+        tap_config = test_utils.get_db_config()
+        tap_config["use_singer_decimal"] = True
+
+        tap_mssql.do_sync(self.conn, tap_config, self.catalog, state)
+        
+        record_messages = list(
+            filter(lambda m: isinstance(m, singer.RecordMessage), SINGER_MESSAGES)
+        )
+
+        self.assertEqual(len(record_messages),3)
+
+        self.assertEqual(record_messages[0].record,{"val":2147483647})
+
         self.assertRegex(currently_syncing_seq(SINGER_MESSAGES), "^a+b+c+_+")
 
     def test_start_at_currently_syncing(self):
@@ -642,4 +654,3 @@ if __name__ == "__main__":
     # test1.test_binlog_stream()
     test1 = TestTypeMapping()
     test1.setUpClass()
-    test1.test_decimal()
