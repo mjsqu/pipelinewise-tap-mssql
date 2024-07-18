@@ -345,7 +345,7 @@ class TestCurrentStream(unittest.TestCase):
                 cursor.execute("CREATE TABLE a (val float)")
                 cursor.execute("CREATE TABLE b (val int)")
                 cursor.execute("CREATE TABLE c (val int)")
-                cursor.execute("INSERT INTO a (val) VALUES (2147483647)")
+                cursor.execute("INSERT INTO a (val) VALUES (1844674407370955)")
                 cursor.execute("INSERT INTO b (val) VALUES (1)")
                 cursor.execute("INSERT INTO c (val) VALUES (1)")
 
@@ -381,8 +381,8 @@ class TestCurrentStream(unittest.TestCase):
         )
 
         self.assertEqual(len(record_messages),3)
-
-        self.assertEqual(record_messages[0].record,{"val":2147483647})
+        # TODO: Singer Decimal does not handle values much bigger than this, they are output as '9999e+19' etc.
+        self.assertEqual(record_messages[0].record,{"val":'1844674407370955.0'})
 
         self.assertRegex(currently_syncing_seq(SINGER_MESSAGES), "^a+b+c+_+")
 

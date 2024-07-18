@@ -12,7 +12,7 @@ poetry run tox -e py
 1. Set up a SQL Server image by running the command used in the `tox.ini` file:
 
 ```
-docker run -p 1433:1433 -e "MSSQL_SA_PASSWORD=testDatabase1" -e "ACCEPT_EULA=Y" mcr.microsoft.com/mssql/server:2019
+docker run -p 1433:1433 -e "MSSQL_SA_PASSWORD=testDatabase1" -e "ACCEPT_EULA=Y" mcr.microsoft.com/mssql/server:2019-latest
 ```
 
 2. Selectively test using the `-k` option in pytest:
