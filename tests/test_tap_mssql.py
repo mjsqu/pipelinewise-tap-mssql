@@ -1,13 +1,13 @@
-import copy
-import os
+from decimal import Decimal
+from random import randint
 import unittest
 
-import pymssql
 import singer
 import singer.metadata
 
 import tap_mssql
 from tap_mssql.connection import connect_with_backoff
+
 
 try:
     import tests.utils as test_utils
@@ -26,12 +26,11 @@ import tap_mssql.sync_strategies.common as common
 
 LOGGER = singer.get_logger()
 
+# TODO: Add pickle to this to verify no loss of precision in message passed to stdout
 SINGER_MESSAGES = []
-
 
 def accumulate_singer_messages(message):
     SINGER_MESSAGES.append(message)
-
 
 singer.write_message = accumulate_singer_messages
 
@@ -342,10 +341,10 @@ class TestCurrentStream(unittest.TestCase):
                         cursor.execute(f"drop table {t}")
                     except:
                         pass
-                cursor.execute("CREATE TABLE a (val float)")
+                cursor.execute("CREATE TABLE a (val decimal(1))")
                 cursor.execute("CREATE TABLE b (val int)")
                 cursor.execute("CREATE TABLE c (val int)")
-                cursor.execute("INSERT INTO a (val) VALUES (1844674407370955)")
+                cursor.execute("INSERT INTO a (val) VALUES (1)")
                 cursor.execute("INSERT INTO b (val) VALUES (1)")
                 cursor.execute("INSERT INTO c (val) VALUES (1)")
 
@@ -372,18 +371,9 @@ class TestCurrentStream(unittest.TestCase):
         SINGER_MESSAGES.clear()
 
         tap_config = test_utils.get_db_config()
-        tap_config["use_singer_decimal"] = True
+        tap_config["use_singer_decimal"] = False
 
         tap_mssql.do_sync(self.conn, tap_config, self.catalog, state)
-        
-        record_messages = list(
-            filter(lambda m: isinstance(m, singer.RecordMessage), SINGER_MESSAGES)
-        )
-
-        self.assertEqual(len(record_messages),3)
-        # TODO: Singer Decimal does not handle values much bigger than this, they are output as '9999e+19' etc.
-        self.assertEqual(record_messages[0].record,{"val":'1844674407370955.0'})
-
         self.assertRegex(currently_syncing_seq(SINGER_MESSAGES), "^a+b+c+_+")
 
     def test_start_at_currently_syncing(self):
@@ -647,6 +637,61 @@ class TestViews(unittest.TestCase):
 
         self.assertEqual(primary_keys, {"a_table": ["id"], "a_view": []})
 
+class TestDecimal(unittest.TestCase):
+    
+    # Generate test columns and values
+    # e.g. val15_10 = 22222.44444 44444
+    column_definitions = []
+    column_values = {}
+    for p in range(15,39):
+        for s in range(10,p):
+            column_definitions.append(f"""val{p}_{s} decimal({p},{s})""")
+            column_values[f"""val{p}_{s}"""] = f"""{str(randint(1,9))*(p-s)}.{str(randint(1,9))*(s)}"""
+    
+    def setUp(self):
+        self.conn = test_utils.get_test_connection()
+        with connect_with_backoff(self.conn) as open_conn:
+            with open_conn.cursor() as cursor:
+                for t in ["a",]:
+                    try:
+                        cursor.execute(f"drop table {t}")
+                    except:
+                        pass
+                cursor.execute(f"""CREATE TABLE a ({','.join(self.column_definitions)})""")
+                insert_statement = f"""INSERT INTO a ({','.join(self.column_values.keys())}) VALUES ({','.join(self.column_values.values())})"""
+                cursor.execute(insert_statement)
+
+        self.catalog = test_utils.discover_catalog(self.conn, {})
+
+        for stream in self.catalog.streams:
+            stream.key_properties = []
+
+            stream.metadata = [
+                {
+                    "breadcrumb": (),
+                    "metadata": {"selected": True, "database-name": "dbo"},
+                },
+                {"breadcrumb": ("properties", "val"), "metadata": {"selected": True}},
+            ]
+
+            stream.stream = stream.table
+            test_utils.set_replication_method_and_key(stream, "FULL_TABLE", None)
+
+    def test_emit_currently_syncing(self):
+        state = {}
+        global SINGER_MESSAGES
+        SINGER_MESSAGES.clear()
+
+        tap_config = test_utils.get_db_config()
+        tap_config["use_singer_decimal"] = True
+
+        tap_mssql.do_sync(self.conn, tap_config, self.catalog, state)
+        
+        record_messages = list(
+            filter(lambda m: isinstance(m, singer.RecordMessage), SINGER_MESSAGES)
+        )
+        for k,v in self.column_values.items():
+            self.assertEqual(record_messages[0].record[k],str(v))
 
 if __name__ == "__main__":
     # test1 = TestBinlogReplication()
