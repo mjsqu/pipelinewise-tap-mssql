@@ -1,5 +1,6 @@
 from decimal import Decimal
 from random import randint
+import json
 import unittest
 
 import singer
@@ -28,9 +29,11 @@ LOGGER = singer.get_logger()
 
 # TODO: Add pickle to this to verify no loss of precision in message passed to stdout
 SINGER_MESSAGES = []
+STDOUT_MESSAGES = []
 
 def accumulate_singer_messages(message):
     SINGER_MESSAGES.append(message)
+    STDOUT_MESSAGES.append(singer.format_message(message))
 
 singer.write_message = accumulate_singer_messages
 
@@ -681,17 +684,22 @@ class TestDecimal(unittest.TestCase):
         state = {}
         global SINGER_MESSAGES
         SINGER_MESSAGES.clear()
+        global STDOUT_MESSAGES
+        STDOUT_MESSAGES.clear()
 
         tap_config = test_utils.get_db_config()
-        tap_config["use_singer_decimal"] = True
+        tap_config["use_singer_decimal"] = False
 
         tap_mssql.do_sync(self.conn, tap_config, self.catalog, state)
         
         record_messages = list(
             filter(lambda m: isinstance(m, singer.RecordMessage), SINGER_MESSAGES)
         )
-        for k,v in self.column_values.items():
-            self.assertEqual(record_messages[0].record[k],str(v))
+        record_messages_stdout = [m for m in STDOUT_MESSAGES if json.loads(m).get('type')=='RECORD']
+        
+        for k, v in self.column_values.items():
+            self.assertEqual(json.loads(record_messages_stdout[0])['record'][k],str(v))
+            self.assertEqual(record_messages[0].record[k],v)
 
 if __name__ == "__main__":
     # test1 = TestBinlogReplication()
