@@ -2,6 +2,7 @@ from decimal import Decimal
 from random import randint
 import json
 import unittest
+import pytest
 
 import singer
 import singer.metadata
@@ -646,8 +647,8 @@ class TestDecimal(unittest.TestCase):
     # e.g. val15_10 = 22222.44444 44444
     column_definitions = []
     column_values = {}
-    for p in range(15,39):
-        for s in range(10,p):
+    for p in range(35,39):
+        for s in range(37,p):
             column_definitions.append(f"""val{p}_{s} decimal({p},{s})""")
             column_values[f"""val{p}_{s}"""] = f"""{str(randint(1,9))*(p-s)}.{str(randint(1,9))*(s)}"""
     
@@ -698,8 +699,63 @@ class TestDecimal(unittest.TestCase):
         record_messages_stdout = [m for m in STDOUT_MESSAGES if json.loads(m).get('type')=='RECORD']
         
         for k, v in self.column_values.items():
-            self.assertEqual(json.loads(record_messages_stdout[0])['record'][k],str(v))
-            self.assertEqual(record_messages[0].record[k],v)
+            tap_value = record_messages[0].record[k]
+            with self.subTest(tap_value=tap_value):
+                original_value = v
+                self.assertEqual(json.loads(record_messages_stdout[0])['record'][k],str(v))
+                self.assertEqual(tap_value, Decimal(original_value))
+
+def sync_single_decimal_value_table(precision,scale,value):
+    conn = test_utils.get_test_connection()
+    with connect_with_backoff(conn) as open_conn:
+        with open_conn.cursor() as cursor:
+            try:
+                cursor.execute(f"drop table a")
+            except:
+                pass
+            cursor.execute(f"""CREATE TABLE a (val decimal({precision},{scale}))""")
+            insert_statement = f"""INSERT INTO a (val) VALUES ({value})"""
+            cursor.execute(insert_statement)
+    catalog = test_utils.discover_catalog(conn, {})
+    for stream in catalog.streams:
+        stream.key_properties = []
+
+        stream.metadata = [
+            {
+                "breadcrumb": (),
+                "metadata": {"selected": True, "database-name": "dbo"},
+            },
+            {"breadcrumb": ("properties", "val"), "metadata": {"selected": True}},
+        ]
+
+    stream.stream = stream.table
+    test_utils.set_replication_method_and_key(stream, "FULL_TABLE", None)
+    state = {}
+    global SINGER_MESSAGES
+    SINGER_MESSAGES.clear()
+    global STDOUT_MESSAGES
+    STDOUT_MESSAGES.clear()
+
+    tap_config = test_utils.get_db_config()
+    tap_config["use_singer_decimal"] = False
+
+    tap_mssql.do_sync(conn, tap_config, catalog, state)
+    
+    record_messages = list(
+        filter(lambda m: isinstance(m, singer.RecordMessage), SINGER_MESSAGES)
+    )
+    tap_value = record_messages[0].record['val']
+    return tap_value
+
+
+@pytest.mark.parametrize("test_input",[(p,s) for p in range(8,10) for s in range(6,p)])
+def test_value_ranges(test_input):
+    precision = test_input[0]
+    scale = test_input[1]
+    value = f"""{str(randint(1,9))*(precision-scale)}.{str(randint(1,9))*(scale)}"""
+    tap_value = sync_single_decimal_value_table(precision,scale,value)
+
+    assert value == tap_value
 
 if __name__ == "__main__":
     # test1 = TestBinlogReplication()
