@@ -1,3 +1,33 @@
+# tap-mssql 2.5.0 2024-08-26
+
+* removing tox-poetry-install - Not well supported.
+* Updating integration tests vars to CAPS to support passing MSSQL Port
+* tox-docker requires expose rather than ports syntax in tox.ini
+* Bumping docker = "^6.1.3" -> "^7.1.0"
+* Bumping pytest = "^7.0.0" -> "^8.3.2"
+* Bumping pytest-cov = "^4.1.0" -> = "^5.0.0"
+* Bumping mypy = "^1.10.1" -> = "^1.11.1"
+* Bumping pytest-sugar = "^0.9.7" -> = "^1.0.0"
+* Bumping pytest-datafiles = "^2.0" ->  = "^3.0"
+* Bumping tox-docker = "4.1.0" ->  = "5.0.0"
+* Bumping requests = "2.31.0" -> "2.32.3"
+* Bumping tox = "^3.28.0" -> "^4.18.0"
+
+# tap-mssql 2.4.0 2024-08-08
+
+* Moving to patched version of Singer Framework plus using msgspec rather than orjson for JSON serialization speed.
+* Adjusting tox file for test pipeline to point to correct location of the sqlcmd in the latest MSSQL docker image.
+* Adjusting tox file. Added -No switch calling sqlcmd to allow user/password connection to MSSQL.
+* Patching dependencies.
+* Pinned Requests to "2.31.0". This is required as the tox pipeline fails with a Docker API error with requests "2.32.x".
+* Explicitly setting python version 3.8 -> 3.12
+* Moving to using recommended poetry-core for build. https://python-poetry.org/docs/pyproject/#poetry-and-pep-517
+* NOTE: Recommend refactoring to avoid using tox-poetry-installer as restrictive dependencies are stopping tox and docker updates. This may resolve the requests/docker api issue.
+
+# tap-mssql 2.3.1 2024-07-22
+
+* Bug Fix. Issue #62 - change to column selection using lists instead of sets to preserve column ordering
+
 # tap-mssql 2.3.0 2024-04-18
 
 * Bug Fix. Change pendulum DateTime type to datetime.datetime as pymssql 2.3.0 is no longer compatible with query parameters as pendulum DateTime (https://github.com/pymssql/pymssql/issues/889)
